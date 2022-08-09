@@ -5,7 +5,7 @@ name: Flutter CI
 on:
   push:
     branches:
-    - master
+    - atul_branch
     
 # on: push    # Default will running for every branch.
     
