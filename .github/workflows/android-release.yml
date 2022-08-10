@@ -11,7 +11,7 @@ on:
       - arvind_branchs
 
 jobs:
-  build_android:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,9 +24,9 @@ jobs:
           java-version: '12.x'
 
       - name: Install and set Flutter version
-        uses: subosito/flutter-action@v1.4.0
+        uses: subosito/flutter-action@v1
         with:
-          flutter-version: '2.0.1'
+          flutter-version: '3.0.5'
 
       - name: Create the Keystore
         env:
