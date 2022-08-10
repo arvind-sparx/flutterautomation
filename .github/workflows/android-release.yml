@@ -2,9 +2,13 @@ name: Flutter_Android
 
 on:
   push:
-    branches: [main]
+    branches:
+      - atul_branch
+      - arvind_branchs
   pull_request:
-    branches: [main]
+    branches:
+      - atul_branch
+      - arvind_branchs
 
 jobs:
   build_android:
