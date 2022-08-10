@@ -11,40 +11,76 @@ on:
       - arvind_branchs
 
 jobs:
-  build:
+  android:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout the code
-        uses: actions/checkout@v2
-
-      - name: Setup Java to compile Android project
-        uses: actions/setup-java@v1
-        with:
-          java-version: '12.x'
-
-      - name: Install and set Flutter version
-        uses: subosito/flutter-action@v1
+      - uses: actions/checkout@v3
+      - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.0.5'
-
-      - name: Create the Keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: |
-          # import keystore from secrets
-          echo $KEYSTORE_BASE64 | base64 -d > $RUNNER_TEMP/my_production.keystore
-      - name: Restore packages
+          channel: 'stable'
+      - name: Flutter Pub Get
         run: flutter pub get
-
-      - name: Build Android App Bundle
-        run: flutter build appbundle --release
-
-      - name: Sign Android App Bundle
-        run: jarsigner -keystore $RUNNER_TEMP/my_production.keystore -storepass ${{ secrets.KEYSTORE_PASSWORD }} -keypass ${{ secrets.KEYSTORE_PASSWORD_ALIAS }} -sigalg SHA256withRSA -digestalg SHA-256 -signedjar build/app/outputs/bundle/release/app-release-signed.aab build/app/outputs/bundle/release/*.aab my_production_alias
-
-      - name: Publish Android Artefacts
-        uses: actions/upload-artifact@v1
+      - env:
+          ANDROID_SIGNING: ${{ secrets.ANDROID_SIGNING }}
+          PLAYSTORE_API_KEY: ${{ secrets.PLAYSTORE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_SERVICE_INFO: ${{ secrets.FIREBASE_ANDROID_GOOGLE_SERVICE_INFO }}
+        name: Import Signing
+        run: |
+          base64 -d <<< $ANDROID_SIGNING > signing.zip && unzip -o -d android/app signing.zip
+          base64 -d <<< $PLAYSTORE_API_KEY > android/app/signing/playstore_key.json
+          base64 -d <<< $GOOGLE_SERVICE_INFO > android/app/src/release/google-services.json
+      - name: Flutter Build
+        run: flutter build appbundle --release --dart-define=env=prod --no-shrink
+      - uses: r0adkll/upload-google-play@v1.0.12
+        name: Upload Play Store
         with:
-          name: release-aab-signed
-          path: build/app/outputs/bundle/release/app-release-signed.aab
+          serviceAccountJson: android/app/signing/playstore_key.json
+          packageName: nrikiji.flutter_start_app
+          releaseFile: build/app/outputs/bundle/release/app-release.aab
+          track: internal
+  ios:
+    runs-on: macos-12
+    steps:
+      - uses: actions/checkout@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.0.5'
+          channel: 'stable'
+      - name: Flutter Pub Get
+        run: flutter pub get
+      - name: Bundle Install
+        working-directory: ./ios
+        run: bundle install
+      - name: Setup App Store Connect API
+        id: asc
+        uses: yuki0n0/action-appstoreconnect-token@v1.0
+        with:
+          key id: ${{ secrets.ASC_KEY_ID }}
+          issuer id: ${{ secrets.ASC_ISSUER_ID }}
+          key: ${{ secrets.ASC_API_KEY }}
+      - name: Import Certificates
+        env:
+          CERTIFICATES: ${{ secrets.APPLE_CERTIFICATES }}
+          PROVISIONING_PROFILE: ${{ secrets.APPLE_PROFILE }}
+          GOOGLE_SERVICE_INFO: ${{ secrets.FIREBASE_IOS_GOOGLE_SERVICE_INFO }}
+        working-directory: ./ios
+        run: |
+          mkdir -p certificates
+          base64 -D -o certificates/distribute.p12 <<< $CERTIFICATES
+          base64 -D -o certificates/distribute.mobileprovision <<< $PROVISIONING_PROFILE
+          base64 -D -o Runner/GoogleService-Info-prod.plist <<< $GOOGLE_SERVICE_INFO
+          bundle exec fastlane setup
+      - name: Flutter Build
+        env:
+          FLUTTER_BUILD_MODE: 'release'
+        run: flutter build ios --release --dart-define=env=prod
+      - name: Upload App Store
+        env:
+          ASC_TEAM_ID: ${{ secrets.ASC_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_API_KEY: ${{ secrets.ASC_API_KEY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        working-directory: ./ios
+        run: bundle exec fastlane gh_actions_store_app_distribution
