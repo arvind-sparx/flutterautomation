@@ -6,7 +6,8 @@ on:
   push:
     branches:
     - atul_branch
-    
+    - arvind_branchs
+
 # on: push    # Default will running for every branch.
     
 jobs:
